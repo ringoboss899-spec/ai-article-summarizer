@@ -3,6 +3,6 @@ requests
 beautifulsoup4
 transformers
 torch
-textblob
-youtube-transcript-api
 deep-translator
+youtube-transcript-api
+assemblyai

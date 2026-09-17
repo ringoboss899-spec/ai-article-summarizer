@@ -4,7 +4,11 @@ from bs4 import BeautifulSoup
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from deep_translator import GoogleTranslator
 from youtube_transcript_api import YouTubeTranscriptApi
+import assemblyai as aai
 import re
+
+# AssemblyAI API Configuration
+aai.settings.api_key = "073a16e2551e42d4b6f0f9d9e1b4c07d"
 
 # Page Configuration
 st.set_page_config(page_title="Smart AI Summarizer", page_icon="🤖", layout="centered")
@@ -22,19 +26,16 @@ def load_model_and_tokenizer():
 
 tokenizer, model = load_model_and_tokenizer()
 
-# Generate Base Summary
 def generate_base_summary(text):
     inputs = tokenizer([text], max_length=1024, return_tensors="pt", truncation=True)
     summary_ids = model.generate(inputs["input_ids"], max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
     return tokenizer.decode(summary_ids[0], skip_special_tokens=True)
 
-# Extract YouTube Video ID (Handles standard, embed, and short youtu.be links with query parameters)
 def get_youtube_id(url):
     pattern = r"(?:v=|\/|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})"
     match = re.search(pattern, url)
     return match.group(1) if match else None
 
-# Scrape Article Text
 def scrape_article(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -45,22 +46,24 @@ def scrape_article(url):
     except Exception:
         return None
 
-# Fetch YouTube Transcript (Multi-language and Fallback Support)
-def get_youtube_transcript(video_id):
+# Advanced Transcript Fetcher (Fallback to AssemblyAI Audio Processing)
+def get_youtube_transcript_advanced(url, video_id):
     try:
-        # Try fetching common languages directly
         transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'en-US', 'ur', 'hi'])
         return " ".join([item['text'] for item in transcript_list])
     except Exception:
-        try:
-            # Fallback to any available transcript / auto-generated captions
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            for transcript in transcript_list:
-                return " ".join([item['text'] for item in transcript.fetch()])
-        except Exception:
-            return None
+        pass
 
-# User Inputs (English Labels)
+    try:
+        transcriber = aai.Transcriber()
+        transcript = transcriber.transcribe(url)
+        if transcript.status == aai.TranscriptStatus.error:
+            return None
+        return transcript.text
+    except Exception:
+        return None
+
+# User Inputs
 url = st.text_input("🔗 Enter News Article or YouTube Link:")
 custom_prompt = st.text_area(
     "💬 Custom Instructions / Prompt (Ask AI in any language):",
@@ -73,36 +76,28 @@ if st.button("🚀 Analyze & Summarize"):
         with st.spinner("Processing content and generating response..."):
             extracted_text = ""
             
-            # Check for YouTube Links
             if "youtube.com" in url or "youtu.be" in url:
                 video_id = get_youtube_id(url)
                 if video_id:
-                    extracted_text = get_youtube_transcript(video_id)
+                    extracted_text = get_youtube_transcript_advanced(url, video_id)
                     if not extracted_text:
-                        st.error("Error: Could not retrieve subtitles or transcript for this YouTube video. Please try a video with closed captions (CC) enabled.")
+                        st.error("Error: Could not retrieve transcript using standard or advanced methods.")
                 else:
-                    st.error("Error: Invalid YouTube URL format. Please enter a valid YouTube link.")
+                    st.error("Error: Invalid YouTube URL format.")
             else:
-                # Scrape Article
                 extracted_text = scrape_article(url)
 
             if extracted_text:
-                # Generate AI Base Summary
                 raw_summary = generate_base_summary(extracted_text)
-                
-                # Format response according to user instructions
-                final_output = f"Summary:\n{raw_summary}\n\nInstructions Followed:\n{custom_prompt}"
-                
-                # Translate output back into the prompt's language if necessary
                 st.session_state['summary'] = raw_summary
                 st.session_state['custom_prompt'] = custom_prompt
                 st.session_state['processed'] = True
             else:
-                st.error("Error: Failed to fetch text from the provided URL. Please verify the link and try again.")
+                st.error("Error: Failed to fetch text from the provided URL.")
     else:
         st.warning("Warning: Please enter a valid URL before proceeding.")
 
-# Display Results & Translation Controls
+# Display Results
 if st.session_state.get('processed'):
     st.subheader("📌 Key Summary:")
     st.write(st.session_state['summary'])
