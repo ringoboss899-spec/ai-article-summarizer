@@ -4,19 +4,15 @@ from bs4 import BeautifulSoup
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from deep_translator import GoogleTranslator
 from youtube_transcript_api import YouTubeTranscriptApi
-import assemblyai as aai
 import re
-
-# AssemblyAI API Configuration
-aai.settings.api_key = "073a16e2551e42d4b6f0f9d9e1b4c07d"
 
 # Page Configuration
 st.set_page_config(page_title="Smart AI Summarizer", page_icon="🤖", layout="centered")
 
 st.title("🤖 Smart AI Article & Video Summarizer")
-st.write("Paste any news article or YouTube link, give custom instructions in any language, and get instant tailored response!")
+st.write("Paste any news article or YouTube link, give custom instructions, and get instant insights!")
 
-# Load HuggingFace Model & Tokenizer
+# Load Model & Tokenizer
 @st.cache_resource
 def load_model_and_tokenizer():
     model_name = "sshleifer/distilbart-cnn-12-6"
@@ -46,56 +42,49 @@ def scrape_article(url):
     except Exception:
         return None
 
-# Advanced Transcript Fetcher (Fallback to AssemblyAI Audio Processing)
-def get_youtube_transcript_advanced(url, video_id):
+def get_youtube_transcript(video_id):
     try:
         transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'en-US', 'ur', 'hi'])
         return " ".join([item['text'] for item in transcript_list])
-    except Exception:
-        pass
-
-    try:
-        transcriber = aai.Transcriber()
-        transcript = transcriber.transcribe(url)
-        if transcript.status == aai.TranscriptStatus.error:
-            return None
-        return transcript.text
     except Exception:
         return None
 
 # User Inputs
 url = st.text_input("🔗 Enter News Article or YouTube Link:")
+manual_text = st.text_area("📝 Alternative: Paste Article / Video Transcript here directly (If link fails):", height=100)
+
 custom_prompt = st.text_area(
     "💬 Custom Instructions / Prompt (Ask AI in any language):",
-    value="Is video ke main points bullet points me likh kr do, ye mere liye kyn kaam ki hai (14 years student ke liye easy language me samjhau), aur 3 tips do.",
-    height=120
+    value="Is content ke main points bullet points me likh kr do, ye mere liye kyn kaam ka hai, aur 3 tips do.",
+    height=100
 )
 
 if st.button("🚀 Analyze & Summarize"):
-    if url:
-        with st.spinner("Processing content and generating response..."):
-            extracted_text = ""
-            
+    extracted_text = ""
+    
+    if manual_text.strip():
+        extracted_text = manual_text
+    elif url:
+        with st.spinner("Processing link..."):
             if "youtube.com" in url or "youtu.be" in url:
                 video_id = get_youtube_id(url)
                 if video_id:
-                    extracted_text = get_youtube_transcript_advanced(url, video_id)
+                    extracted_text = get_youtube_transcript(video_id)
                     if not extracted_text:
-                        st.error("Error: Could not retrieve transcript using standard or advanced methods.")
+                        st.error("YouTube IP blocked this video. Please copy-paste video transcript/text in the box above!")
                 else:
-                    st.error("Error: Invalid YouTube URL format.")
+                    st.error("Invalid YouTube URL!")
             else:
                 extracted_text = scrape_article(url)
 
-            if extracted_text:
-                raw_summary = generate_base_summary(extracted_text)
-                st.session_state['summary'] = raw_summary
-                st.session_state['custom_prompt'] = custom_prompt
-                st.session_state['processed'] = True
-            else:
-                st.error("Error: Failed to fetch text from the provided URL.")
+    if extracted_text:
+        with st.spinner("Generating summary..."):
+            raw_summary = generate_base_summary(extracted_text)
+            st.session_state['summary'] = raw_summary
+            st.session_state['custom_prompt'] = custom_prompt
+            st.session_state['processed'] = True
     else:
-        st.warning("Warning: Please enter a valid URL before proceeding.")
+        st.warning("Please provide a URL or paste text directly.")
 
 # Display Results
 if st.session_state.get('processed'):
@@ -105,9 +94,8 @@ if st.session_state.get('processed'):
     st.subheader("💡 Your Custom Prompt / Instructions:")
     st.info(st.session_state['custom_prompt'])
 
-    st.subheader("🌐 Quick Translation Option:")
     if st.button("Translate Summary to Urdu"):
-        with st.spinner("Translating summary..."):
+        with st.spinner("Translating..."):
             translated_text = GoogleTranslator(source='auto', target='ur').translate(st.session_state['summary'])
             st.success("Urdu Translation:")
             st.write(translated_text)
