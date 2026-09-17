@@ -22,8 +22,18 @@ def load_model_and_tokenizer():
 
 tokenizer, model = load_model_and_tokenizer()
 
+# Helper Function: Clean Garbage / Timestamps from input text
+def clean_input_text(text):
+    # Remove timestamps like 00:00, 1:01, 12:34
+    text = re.sub(r'\d+:\d+', '', text)
+    # Remove special messy characters and extra spacing
+    text = re.sub(r'[\-\:\"“”«»]', ' ', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
 def generate_base_summary(text):
-    inputs = tokenizer([text], max_length=1024, return_tensors="pt", truncation=True)
+    cleaned = clean_input_text(text)
+    inputs = tokenizer([cleaned], max_length=1024, return_tensors="pt", truncation=True)
     summary_ids = model.generate(inputs["input_ids"], max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
     return tokenizer.decode(summary_ids[0], skip_special_tokens=True)
 
@@ -86,19 +96,19 @@ if st.button("🚀 Analyze & Summarize"):
     else:
         st.warning("Please provide a URL or paste text directly.")
 
-# Display Results & Safe Translation
+# Display Results
 if st.session_state.get('processed'):
-    st.subheader("📌 Key Summary (English):")
+    st.subheader("📌 Key Summary:")
     st.write(st.session_state['summary'])
 
     st.subheader("💡 Your Custom Prompt / Instructions:")
     st.info(st.session_state['custom_prompt'])
 
-    if st.button("🌐 Safe Translate to Urdu / Roman Urdu"):
-        with st.spinner("Translating safely..."):
+    if st.button("🌐 Translate Summary to Urdu"):
+        with st.spinner("Translating..."):
             try:
                 translated_text = GoogleTranslator(source='auto', target='ur').translate(st.session_state['summary'])
                 st.success("Urdu Translation:")
                 st.write(translated_text)
-            except Exception as e:
-                st.error("Translation rate limit reached. Please try clicking the translate button again in 30 seconds.")
+            except Exception:
+                st.error("Translation server busy. Please try again in a few seconds.")
