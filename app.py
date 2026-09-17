@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
-from transformers import pipeline
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from deep_translator import GoogleTranslator
 from youtube_transcript_api import YouTubeTranscriptApi
 import re
@@ -12,12 +12,20 @@ st.set_page_config(page_title="Smart AI Summarizer", page_icon="🤖", layout="c
 st.title("🤖 Smart AI Article & Video Summarizer")
 st.write("Paste any news article or YouTube link, give custom instructions, and get instant insights in any language!")
 
-# Lightweight & reliable model load
+# Direct Model & Tokenizer Load (KeyError Fix)
 @st.cache_resource
-def load_summarizer():
-    return pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+def load_model_and_tokenizer():
+    model_name = "sshleifer/distilbart-cnn-12-6"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+    return tokenizer, model
 
-summarizer = load_summarizer()
+tokenizer, model = load_model_and_tokenizer()
+
+def generate_summary(text):
+    inputs = tokenizer([text], max_length=1024, return_tensors="pt", truncation=True)
+    summary_ids = model.generate(inputs["input_ids"], max_length=130, min_length=30, length_penalty=2.0, num_beams=4, early_stopping=True)
+    return tokenizer.decode(summary_ids[0], skip_special_tokens=True)
 
 # Helper Function: Extract YouTube Video ID
 def get_youtube_id(url):
@@ -71,8 +79,7 @@ if st.button("🚀 Analyze & Summarize"):
                 extracted_text = scrape_article(url)
 
             if extracted_text:
-                truncated_text = extracted_text[:2000]
-                summary = summarizer(truncated_text, max_length=130, min_length=30, do_sample=False)[0]['summary_text']
+                summary = generate_summary(extracted_text)
                 
                 st.session_state['summary'] = summary
                 st.session_state['custom_instructions'] = custom_prompt
