@@ -6,13 +6,13 @@ from deep_translator import GoogleTranslator
 from youtube_transcript_api import YouTubeTranscriptApi
 import re
 
-# Page Configuration
+# Page Setup
 st.set_page_config(page_title="Smart AI Summarizer", page_icon="🤖", layout="centered")
 
 st.title("🤖 Smart AI Article & Video Summarizer")
 st.write("Paste any news article or YouTube link, give custom instructions, and get instant insights!")
 
-# Load Model & Tokenizer
+# Load Model
 @st.cache_resource
 def load_model_and_tokenizer():
     model_name = "sshleifer/distilbart-cnn-12-6"
@@ -86,16 +86,19 @@ if st.button("🚀 Analyze & Summarize"):
     else:
         st.warning("Please provide a URL or paste text directly.")
 
-# Display Results
+# Display Results & Safe Translation
 if st.session_state.get('processed'):
-    st.subheader("📌 Key Summary:")
+    st.subheader("📌 Key Summary (English):")
     st.write(st.session_state['summary'])
 
     st.subheader("💡 Your Custom Prompt / Instructions:")
     st.info(st.session_state['custom_prompt'])
 
-    if st.button("Translate Summary to Urdu"):
-        with st.spinner("Translating..."):
-            translated_text = GoogleTranslator(source='auto', target='ur').translate(st.session_state['summary'])
-            st.success("Urdu Translation:")
-            st.write(translated_text)
+    if st.button("🌐 Safe Translate to Urdu / Roman Urdu"):
+        with st.spinner("Translating safely..."):
+            try:
+                translated_text = GoogleTranslator(source='auto', target='ur').translate(st.session_state['summary'])
+                st.success("Urdu Translation:")
+                st.write(translated_text)
+            except Exception as e:
+                st.error("Translation rate limit reached. Please try clicking the translate button again in 30 seconds.")
